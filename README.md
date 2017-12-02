@@ -40,12 +40,12 @@ If the last status update is too long ago, the Arduino will start and keep blink
                                  | [ ]IOREF                 MISO/12[ ] |   .  --> SO on ENC28J60 module
                                  | [ ]RST                   MOSI/11[ ]~|   .  --> SI on ENC28J60 module
       VCC on ENC28J60 module <-- | [ ]3V3    +---+               10[ ]~|   .  --> CS on ENC28J60 module
-                                 | [ ]5v    -| A |-               9[ ]~|   .  --> BLUE LED on button through current-limiting resistor
+                                 | [ ]5v    -| A |-               9[ ]~|   .  --> button blue LED
       GND on ENC28J60 module <-- | [ ]GND   -| R |-               8[ ] |   B0
                   GND on LED <-- | [ ]GND   -| D |-                    |
                                  | [ ]Vin   -| U |-               7[ ] |   D7 --> button contact 2
-                                 | [ ]A0    -| N |-               6[ ]~|   .  --> RED LED on button through current-limiting resistor
-                                 |          -| I |-               5[ ]~|   .
+                                 | [ ]A0    -| N |-               6[ ]~|   .  --> button red LED
+                                 |          -| I |-               5[ ]~|   .  --> button green LED (unused)
                                  | [ ]A1    -| O |-               4[ ] |   .
                                  | [ ]A2     +---+           INT1/3[ ]~|   .
                                  | [ ]A3                     INT0/2[ ] |   .
@@ -57,19 +57,25 @@ If the last status update is too long ago, the Arduino will start and keep blink
 
                                    http://busyducks.com/ascii-art-arduinos
 
+                          connection of ENC28J60 ethernet module according to
+                              https://www.arduino.cc/en/Reference/Ethernet
+
            ________
           (   OO   )
         +------------+   BLUE+   +------+
-        |   Button   |-----------| 220  |--> PIN 9 on Arduino
+        |   Button   |-----------| 220Ω |--> 9 on Arduino
         |      +     |           +------+
         |            |   RED+    +------+
-        |   RGB LED  |-----------| 220  |--> PIN 6 on Arduino
+        |   RGB LED  |-----------| 220Ω |--> 6 on Arduino
+        |            |           +------+
+        |            |   GREEN+  +------+
+        |            |-----------| 220Ω |--> 5 on Arduino
         +------------+           +------+
             2| |1        GND
              | +--------------------------> GND on Arduino
              |
              |        button press
-             +----------------------------> PIN 7 on Arduino
+             +----------------------------> 7 on Arduino
 
              normally open switch, wiring and configuration converts it to a virtual normally closed switch
              (pulled up by Arduino-internal resistor, pull down on press)
@@ -90,7 +96,10 @@ If the last status update is too long ago, the Arduino will start and keep blink
 ## Software setup
 
 ### Libraries required:
-  * https://github.com/UIPEthernet/UIPEthernet (needs somewhat current Arduino IDE, Ubuntu's standard version doesn't work) Wwitch to Ethernet library if using a W5100 based adapter.
+  * https://github.com/UIPEthernet/UIPEthernet
+      - needs somewhat current Arduino IDE, the one in Ubuntu 17.04 didn't work
+      - Considering switching to https://github.com/dimitar-kunchev/UIPEthernet because it supports non-blocking connect).
+      - Switch to Arduino's Ethernet library if using a W5100 based adapter.
   * https://github.com/leethomason/Button (forked from classic https://github.com/t3db0t/Button)
 
 ### Arduino sketch
@@ -104,11 +113,11 @@ If the last status update is too long ago, the Arduino will start and keep blink
   * Upload to your Arduino
 ### wifitoggler.sh
   * modify to your needs, particularly:
-    * LISTEN_PORT (needs to match the serverPort in the Arduino sketch
+    * LISTEN_PORT (needs to match the serverPort in the Arduino sketch)
     * WIFI_DEVICE (needs to match your router, execute `uci export wireless` on your router to find out)
     * SECRET (needs to match the secret in TOKEN, MESSAGE_ON and MESSAGE_OFF in the Arduino sketch)
   * Transfer the script to your router
   * ensure you have socat installed on the router
   * start script `/path/to/wifitoggler.sh`
-  It will go the the background and only log debug output to the console
+  It will go to the background and only log debug output to the console
   * ensure the script is started at reboot (OpenWRT LuCI web interface)
