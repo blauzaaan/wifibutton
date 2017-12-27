@@ -75,7 +75,7 @@ If the last status update is too long ago, the Arduino will start and keep blink
              | +--------------------------> GND on Arduino
              |
              |        button press
-             +----------------------------> 7 on Arduino
+             +----------------------------> PIN 7 on Arduino
 
              normally open switch, wiring and configuration converts it to a virtual normally closed switch
              (pulled up by Arduino-internal resistor, pull down on press)

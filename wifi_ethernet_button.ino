@@ -24,46 +24,53 @@
  -----------------------------------------------------------------------
 
   Adjust to your needs, particularly:
-    * serverIp
-    * serverPort
+    * SERVER_IP
+    * SERVER_PORT
     * WIFI_LED_PIN
+    * ERR_LED_PIN
     * BUTTON_PIN
     * TOKEN, MESSAGE_ON and MESSAGE_OFF (they should all use the same secret, unless you know what you are doing)
 */
 
+// consider switching to https://github.com/dimitar-kunchev/UIPEthernet and non-blocking connect
 #include <UIPEthernet.h>
 #include <Button.h>
 
 // CONFIGURATION
 // adjust these to your needs
 
-IPAddress serverIp = IPAddress(192, 168, 1, 1);
-const short serverPort = 5015;
+#define SERVER_IP IPAddress(192, 168, 1, 1)
+#define SERVER_PORT 5015
 
 // don't use onboard LED as pin 13 is used by ethernet adapter!
-const byte WIFI_LED_PIN = 9;      //wifi status LED pin
-const byte ERR_LED_PIN = 6;      //communication error indicator LED pin
-const byte BUTTON_PIN = 7;  // pin the button is connected to
+#define WIFI_LED_PIN 9      //wifi status LED pin
+#define ERR_LED_PIN 6      //communication error indicator LED pin
+#define BUTTON_PIN 7  // pin the button is connected to
 
-char TOKEN[] = "SECRET";    // secret token for identification. may not contain commas (,)
-const char CMD_QUERY = 'q';       // command to query WiFi status from server
-const char CMD_TOGGLE = 't';      // command to toggle WiFi status on server
+//those need to be char[] for some reason and cannot be #defines - forgive the C amateur...
+const char TOKEN[] = "SECRET";    // secret token for identification. may not contain commas (,)
 const char MESSAGE_ON[] = "SECRET,ON";   // "WiFi is ON" status message expected from server
 const char MESSAGE_OFF[] = "SECRET,OFF"; // "WiFi is OFF" status message expected from server
 
-const unsigned long STATUS_VALIDITY = 180000;       // timeout in milliseconds after which an old status is considered invalid and connection lost alarm is raised
-                                                   //   this should be greater than STATUS_UPDATE_INTERVAL
-const unsigned long STATUS_UPDATE_INTERVAL = 60000; // get a status update from server every so many milliseconds
+#define STATUS_VALIDITY 180000       // timeout in milliseconds after which an old status is considered invalid and connection lost alarm is raised
+                                     //   this should be greater than STATUS_UPDATE_INTERVAL
+#define STATUS_UPDATE_INTERVAL 60000 // get a status update from server every so many milliseconds
 
-const byte WIFI_TURINING_ON_BRIGHTNESS = 127;    // how bright the wifi status led should light to show we
-                                                //   are turning ON and no confirmation has been received yet.
+#define WIFI_TURINING_ON_BRIGHTNESS 127    // how bright the wifi status led should light to show we
+                                           //   are turning ON and no confirmation has been received yet.
 
-const byte WIFI_TURINING_OFF_BRIGHTNESS = 127;  // how bright the wifi status led should light to show we
-                                                //   are turning OFF and no confirmation has been received yet.
+#define WIFI_TURINING_OFF_BRIGHTNESS 127  // how bright the wifi status led should light to show we
+                                          //   are turning OFF and no confirmation has been received yet.
+
+#define SERIAL_LOG false
 
 // END OF CONFIGURATION
 
 //internally used variables below - don't change
+
+#define CMD_QUERY 'q'       // command to query WiFi status from server
+#define CMD_TOGGLE 't'      // command to toggle WiFi status on server
+
 EthernetClient client;
 Button button(BUTTON_PIN, INPUT_PULLUP);
 
@@ -78,7 +85,9 @@ void setup() {
   pinMode(WIFI_LED_PIN, OUTPUT);
   pinMode(ERR_LED_PIN, OUTPUT);
 
+#if SERIAL_LOG
   Serial.begin(9600);
+#endif
 
   //randomly generated MAC address
   uint8_t mac[6] = { 0x80, 0x41, 0x9C, 0xDA, 0x64, 0xCE };
@@ -86,14 +95,16 @@ void setup() {
   //DHCP IP assignment
   Ethernet.begin(mac);
 
-  Serial.print("localIP: ");
+#if SERIAL_LOG
+  Serial.print(F("localIP: "));
   Serial.println(Ethernet.localIP());
-  Serial.print("subnetMask: ");
+  Serial.print(F("subnetMask: "));
   Serial.println(Ethernet.subnetMask());
-  Serial.print("gatewayIP: ");
+  Serial.print(F("gatewayIP: "));
   Serial.println(Ethernet.gatewayIP());
-  Serial.print("dnsServerIP: ");
+  Serial.print(F("dnsServerIP: "));
   Serial.println(Ethernet.dnsServerIP());
+#endif
 
   next = 0;
 }
@@ -105,12 +116,20 @@ void loop() {
   // check if status is too old and turn on alert if this is the case
   if (currentMillis - lastStatusMillis > STATUS_VALIDITY || // check if status is too old
       (currentMillis < lastStatusMillis && currentMillis > STATUS_VALIDITY)) { // or if the currentMillis rolled over and status is too old?
-    Serial.println("status is too old!");
-    Serial.println("currentMillis="+String(currentMillis));
-    Serial.println("lastStatusMillis="+String(lastStatusMillis));
-    Serial.println("STATUS_VALIDITY="+String(STATUS_VALIDITY));
+#if SERIAL_LOG
+    Serial.println(F("status is too old!"));
+    Serial.print(F("currentMillis="));
+    Serial.print(String(currentMillis));
+    Serial.print(F(", lastStatusMillis="));
+    Serial.print(String(lastStatusMillis));
+    Serial.print(F(", STATUS_VALIDITY="));
+    Serial.print(String(STATUS_VALIDITY));
+    Serial.print(F(", that's "));
+    Serial.print((currentMillis - lastStatusMillis)-STATUS_VALIDITY);
+    Serial.println(F(" overdue"));
     digitalWrite(ERR_LED_PIN, HIGH);
     digitalWrite(WIFI_LED_PIN, LOW);
+#endif
   }
 
   //button press handling
@@ -118,11 +137,23 @@ void loop() {
 
   //networking
   if (!client.connected()) {
-    Serial.print("Client connecting to ");
-    Serial.print(serverIp);
+#if SERIAL_LOG
+    Serial.print(F("Client connecting to "));
+    Serial.print(SERVER_IP);
     Serial.print(":");
-    Serial.println(serverPort);
-    client.connect(serverIp, serverPort);
+    Serial.print(SERVER_PORT);
+    Serial.print(" - ");
+#endif
+    if(client.connect(SERVER_IP, SERVER_PORT)){
+#if SERIAL_LOG
+      Serial.println("success");
+#endif
+    }
+    else{
+#if SERIAL_LOG
+      Serial.println("FAILED");
+#endif
+    }
   }
 
   if (client.connected()) {
@@ -135,7 +166,9 @@ void loop() {
         //indicate we're turning off...
         analogWrite(WIFI_LED_PIN, WIFI_TURINING_OFF_BRIGHTNESS);
       }
-      Serial.println("Sending toggle command");
+#if SERIAL_LOG
+      Serial.println(F("Sending toggle command"));
+#endif
       //send toggle command to server (will answer with status)
       client.print(TOKEN);
       client.print(",");
@@ -145,7 +178,9 @@ void loop() {
       //set next status update time
       next = currentMillis + STATUS_UPDATE_INTERVAL;
       //query status
-      Serial.println("Querying status");
+#if SERIAL_LOG
+      Serial.println(F("Querying status"));
+#endif
       client.print(TOKEN);
       client.print(",");
       client.println(CMD_QUERY);
@@ -156,35 +191,47 @@ void loop() {
     while ((size = client.available()) > 0) {
       uint8_t* msg = (uint8_t*)malloc(size-1);
       size = client.read(msg, size);
+#if SERIAL_LOG
       //Serial.write(msg, size);
-
+#endif
       // check message (token, status) and update status accordingly:
       if (strstr((char *)msg,MESSAGE_ON) || strstr((char *)msg,MESSAGE_OFF)) {
-        Serial.print("Got status update: ");
+#if SERIAL_LOG
+        Serial.print(F("Got status update: "));
         Serial.write(msg,size);
+#endif
         lastStatusMillis = currentMillis; // set last status update time to NOW
         digitalWrite(ERR_LED_PIN, LOW);   // clear error indicator - turn LED off
       }
 
       if (strstr((char *)msg,MESSAGE_OFF)) { // if WiFi is off
-        Serial.println("Wifi is off");
+#if SERIAL_LOG
+        Serial.println(F("Wifi is off"));
+#endif
         digitalWrite(WIFI_LED_PIN, LOW);
         wifiStatus=false;
       }
       else if(strstr((char *)msg,MESSAGE_ON)){ // WiFi is on
-        Serial.println("Wifi is on");
+#if SERIAL_LOG
+        Serial.println(F("Wifi is on"));
+#endif
         digitalWrite(WIFI_LED_PIN, HIGH);
         wifiStatus=true;
       }
+#if SERIAL_LOG
       else{
-        Serial.print("Received unknown status: ");
+        Serial.print(F("Received unknown status: "));
         Serial.println((char *)msg);
       }
+#endif
 
       free(msg);
     }
   }
-  else
-    Serial.println("Client connect failed");
+#if SERIAL_LOG
+  else{
+    Serial.println(F("Client connect failed"));
+  }
+#endif
 }
 
