@@ -75,7 +75,7 @@ toggle_wifi() {
 	
 	uci set "wireless.${WIFI_DEVICE}.disabled=$disabled"
 	
-	if ubus list network.wireless >/dev/null 2>/dev/null; then
+	if ubus list network.wireless >/dev/null 2>&1; then
 			ubus call network reload
 	else
 			wifi
@@ -85,6 +85,7 @@ toggle_wifi() {
 }
 
 start_server() {
+	echo starting >&2
 	while read line
 	do
 		line=`echo -n $line|tr -d '\0\r\n'`
@@ -103,11 +104,15 @@ start_server() {
 			;;
 		esac
 	done
+	echo exiting >&2
 }
 
 if [ "$1" = "-s" ]
 then
 	start_server
+	start_server 2>/dev/null
+#	start_server 2>/root/wifitoggler-logs/wifitoggler-$$.log
 else
-	socat tcp-listen:$LISTEN_PORT,reuseaddr,fork EXEC:"$0 -s" &
+#	socat tcp-listen:$LISTEN_PORT,reuseaddr,fork EXEC:"$0 -s" &
+	socat tcp-listen:$LISTEN_PORT,reuseaddr,fork,keepalive,keepidle=10,keepintvl=10,keepcnt=2 EXEC:"$0 -s" &
 fi
