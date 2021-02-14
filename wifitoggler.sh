@@ -2,7 +2,7 @@
 
 #-----------------------------------------------------------------------
 #
-#	Copyright 2017 by blauzaaan, https://github.com/blauzaaan
+#	Copyright 2017-2021 by blauzaaan, https://github.com/blauzaaan
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -26,13 +26,23 @@
 # run:
 # /path/to/wifitoggler.sh
 #
+# control:
+# send SECRET,q for querying wifi status.
+#      Returns SECRET,ON,A/B or SECRET,OFF,A/B
+#      where ON = wifi active, OFF = wifi inactive
+#            A = number of active wifi devices
+#            B = number of wifi devices total
+#
+# send SECRET,t for toggling wifi
+#      Returns status as above
+#
 # requires socat to be installed
 # daemonizes itself while still spitting out status information to STDERR
 #-----------------------------------------------------------------------
 
 LISTEN_PORT=5015
 
-WIFI_DEVICE="@wifi-iface[1]"
+WIFI_DEVICES="@wifi-iface[0] @wifi-iface[1] guest_iface_0 guest_iface_1"
 
 SECRET=SECRET
 QUERY_STATUS=$SECRET,q
@@ -40,40 +50,76 @@ TOGGLE_COMMAND=$SECRET,t
 STATUS_ON=$SECRET,ON
 STATUS_OFF=$SECRET,OFF
 
+NUM_DEVICES=0
+ACTIVE_DEVICES=0
+
 get_wifi_status() {
-	if [ "$(uci get wireless.${WIFI_DEVICE}.disabled 2>/dev/null)" = "1" ]
-	then
-		#wifi is disabled
-		disabled=1
-	else
-		#wifi is enabled
-		disabled=0
-	fi
+	NUM_DEVICES=0
+	ACTIVE_DEVICES=0
+	for i in $WIFI_DEVICES
+	do
+		let NUM_DEVICES+=1
+		if [ "$(uci get wireless.$i.disabled 2>/dev/null)" = "1" ]
+		then
+			#wifi on this device is disabled
+			echo $i: disabled >&2
+		else
+			#wifi on this device is enabled
+			echo $i: enabled >&2
+			let ACTIVE_DEVICES++
+		fi
+	done
+
+#	if [ "$(uci get wireless.${WIFI_DEVICE}.disabled 2>/dev/null)" = "1" ]
+#	then
+#		#wifi is disabled
+#		disabled=1
+#	else
+#		#wifi is enabled
+#		disabled=0
+#	fi
 }
 
 send_wifi_status() {
 	get_wifi_status
+	status=""
 
-	if [ $disabled = 0 ]
+	if [ "$ACTIVE_DEVICES" -gt "0" ]
 	then
-		echo answering: $STATUS_ON >&2
-		echo $STATUS_ON
+		status=$STATUS_ON
 	else
-		echo answering: $STATUS_OFF >&2
-		echo $STATUS_OFF
+		status=$STATUS_OFF
 	fi
+	status="$status,$ACTIVE_DEVICES/$NUM_DEVICES"
+	echo answering: $status >&2
+	echo $status
 }
 
 toggle_wifi() {
 	get_wifi_status
-	if [ $disabled = 1 ]
+	if [ "$ACTIVE_DEVICES" -gt "0" ]
 	then
-		disabled=0
-	else
+		#disable all
 		disabled=1
+	else
+		#enable all
+		disabled=0
 	fi
+
+	for i in $WIFI_DEVICES
+        do
+		uci set "wireless.$i.disabled=$disabled"
+	done
+
+
+#	if [ $disabled = 1 ]
+#	then
+#		disabled=0
+#	else
+#		disabled=1
+#	fi
 	
-	uci set "wireless.${WIFI_DEVICE}.disabled=$disabled"
+#	uci set "wireless.${WIFI_DEVICE}.disabled=$disabled"
 	
 	if ubus list network.wireless >/dev/null 2>&1; then
 			ubus call network reload
@@ -109,10 +155,9 @@ start_server() {
 
 if [ "$1" = "-s" ]
 then
-	start_server
+#	start_server
 	start_server 2>/dev/null
 #	start_server 2>/root/wifitoggler-logs/wifitoggler-$$.log
 else
-#	socat tcp-listen:$LISTEN_PORT,reuseaddr,fork EXEC:"$0 -s" &
 	socat tcp-listen:$LISTEN_PORT,reuseaddr,fork,keepalive,keepidle=10,keepintvl=10,keepcnt=2 EXEC:"$0 -s" &
 fi
